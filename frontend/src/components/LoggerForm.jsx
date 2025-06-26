@@ -14,11 +14,14 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import { logEvent, getLogs, deleteLog } from "../utils/api";
 import Snackbar from "@mui/material/Snackbar";
 import MuiAlert from "@mui/material/Alert";
+import LinearProgress from "@mui/material/LinearProgress";
+import Box from "@mui/material/Box";
 
 const activityTypes = [
   { label: "Meal", emoji: "🥣" },
   { label: "Poop", emoji: "💩" },
   { label: "Wee", emoji: "💦" },
+  { label: "Nincompoop", emoji: "☹️" },
   { label: "Walk (start)", emoji: "🐾" },
   { label: "Walk (end)", emoji: "🏠" },
   { label: "Nap (start)", emoji: "😴" },
@@ -35,24 +38,47 @@ export default function LoggerForm() {
   const [notes, setNotes] = useState("");
   const [logs, setLogs] = useState([]);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [nincompoopRating, setNincompoopRating] = useState(null);
 
   useEffect(() => {
     getLogs().then(setLogs);
   }, []);
 
+  const maxNincompoopScore = 10;
+
   const handleLog = async () => {
     if (!selectedType) return;
+
+    let finalNotes = notes;
+
+    if (selectedType === "Nincompoop") {
+      if (!nincompoopRating) {
+        alert("Please select how much of a nincompoop he was.");
+        return;
+      }
+      finalNotes = `Rating: ${nincompoopRating}${notes ? " — " + notes : ""}`;
+    }
 
     const time = overrideTime
       ? new Date(overrideTime).toISOString()
       : new Date().toISOString();
 
-    await logEvent({ type: selectedType, time, notes });
+    await logEvent({ type: selectedType, time, notes: finalNotes });
     setLogs(await getLogs());
+
+    // Reset
     setSelectedType("");
     setOverrideTime(new Date());
     setNotes("");
-    setSnackbarOpen(true); // show toast
+    setNincompoopRating(null);
+    setSnackbarOpen(true);
+  };
+
+  const getNincompoopColor = (value) => {
+    if (value > 10) return "black";
+    const red = Math.min(255, Math.round((value - 1) * 64));
+    const green = Math.max(0, 255 - (value - 1) * 64);
+    return `rgb(${red}, ${green}, 0)`; // Goes from green to red
   };
 
   function extractNapSessions(logs) {
@@ -86,7 +112,6 @@ export default function LoggerForm() {
     let totalNapMs = 0;
     let totalWalkMs = 0;
 
-    // Calculate nap duration
     napSessions.forEach(({ start, end }) => {
       if (end >= startOfDay && start <= endOfDay) {
         const napStart = start < startOfDay ? startOfDay : start;
@@ -95,7 +120,6 @@ export default function LoggerForm() {
       }
     });
 
-    // Calculate walk duration
     const sorted = [...dayLogs].sort((a, b) => new Date(a.time) - new Date(b.time));
     let lastWalkStart = null;
 
@@ -108,6 +132,14 @@ export default function LoggerForm() {
         lastWalkStart = null;
       }
     });
+
+    // Calculate total nincompoop rating
+    const nincompoopLogs = dayLogs.filter((log) => log.type === "Nincompoop");
+    const totalNincompoopRating = nincompoopLogs.reduce((sum, log) => {
+      const match = log.notes?.match(/Rating:\s*(\d)/);
+      const rating = match ? parseInt(match[1], 10) : 0;
+      return sum + rating;
+    }, 0);
 
     const totalNapMins = Math.round(totalNapMs / 60000);
     const napHours = Math.floor(totalNapMins / 60);
@@ -122,6 +154,7 @@ export default function LoggerForm() {
       poopCount,
       napDuration: `${napHours}h ${napMins}m`,
       walkDuration: `${walkHours}h ${walkMins}m`,
+      totalNincompoopRating,
     };
   }
 
@@ -158,6 +191,21 @@ export default function LoggerForm() {
         onChange={(newValue) => setOverrideTime(newValue)}
         slotProps={{ textField: { fullWidth: true, sx: { mt: 2 } } }}
       />
+
+      {selectedType === "Nincompoop" && (
+        <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+          <Typography variant="body2" sx={{ pt: 0.5 }}>Rating:</Typography>
+          {[1, 2, 3, 4, 5].map((num) => (
+            <Button
+              key={num}
+              variant={nincompoopRating === num ? "contained" : "outlined"}
+              onClick={() => setNincompoopRating(num)}
+            >
+              {num}
+            </Button>
+          ))}
+        </Stack>
+      )}
 
       <TextField
         fullWidth
@@ -266,7 +314,26 @@ export default function LoggerForm() {
                 <Typography variant="body2">
                   💤 Nap Time: {summary.napDuration} — 🚶‍♂️ Walk Time: {summary.walkDuration}
                 </Typography>
+
+                <Box sx={{ width: "100%", mt: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    Nincompoop Level: {summary.totalNincompoopRating}
+                  </Typography>
+                  <LinearProgress
+                    variant="determinate"
+                    value={Math.min((summary.totalNincompoopRating / maxNincompoopScore) * 100, 100)}
+                    sx={{
+                      height: 10,
+                      borderRadius: 5,
+                      backgroundColor: "#eee",
+                      "& .MuiLinearProgress-bar": {
+                        backgroundColor: getNincompoopColor(summary.totalNincompoopRating),
+                      },
+                    }}
+                  />
+                </Box>
               </Stack>
+
 
               <Divider sx={{ my: 3 }} />
 
