@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:3001/api/logs";
+const API_URL = "http://192.168.1.171:3001/api/logs";
 
 export async function logEvent(data) {
   await fetch(API_URL, {
